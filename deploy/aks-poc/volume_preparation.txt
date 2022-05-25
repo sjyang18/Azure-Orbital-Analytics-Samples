@@ -1,0 +1,85 @@
+ENVCODE="syansb21"
+DATA_RESOURCE_GROUP="${ENVCODE}-data-rg"
+AKS_NAMESPACE=vision
+AKS_PERS_SHARE_NAME=fileshare
+VISION_FILE_FILE_NAME=volume-a
+
+RAW_STORAGE_ACCT=$(az storage account list --query "[?tags.store && tags.store == 'raw'].name" -o tsv -g $DATA_RESOURCE_GROUP)
+RAW_STORAGE_KEY=$(az storage account keys list --resource-group $DATA_RESOURCE_GROUP --account-name $RAW_STORAGE_ACCT --query "[0].value" -o tsv)
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: $AKS_NAMESPACE
+EOF
+
+
+# create a Kubernetes secret in Azure CLI
+
+kubectl -n $AKS_NAMESPACE create secret generic azure-secret \
+ --from-literal=azurestorageaccountname=$RAW_STORAGE_ACCT \
+ --from-literal=azurestorageaccountkey=$RAW_STORAGE_KEY
+
+
+# yaml format in bash (not working)
+cat <<EOF | kubectl -n $AKS_NAMESPACE apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-secret
+  namespace: $AKS_NAMESPACE
+data:
+  azurestorageaccountname: "${RAW_STORAGE_ACCT}"
+  azurestorageaccountkey: "${RAW_STORAGE_KEY}"
+EOF
+
+PV_NAME="${ENVCODE}-${AKS_NAMESPACE}-${AKS_PERS_SHARE_NAME}"
+
+cat <<EOF | kubectl -n $AKS_NAMESPACE apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${PV_NAME}
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: azurefile-csi
+  csi:
+    driver: file.csi.azure.com
+    readOnly: false
+    volumeHandle: ${PV_NAME}
+    volumeAttributes:
+      resourceGroup: ${DATA_RESOURCE_GROUP}
+      shareName: ${VISION_FILE_FILE_NAME}
+    nodeStageSecretRef:
+      name: azure-secret
+      namespace: ${AKS_NAMESPACE}
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - uid=0
+    - gid=0
+    - mfsymlinks
+    - cache=strict
+    - nosharesock
+    - nobrl
+EOF
+
+cat << EOF | kubectl -n $AKS_NAMESPACE apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${PV_NAME}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azurefile-csi
+  volumeName: ${PV_NAME}
+  resources:
+    requests:
+      storage: 5Gi
+EOF
