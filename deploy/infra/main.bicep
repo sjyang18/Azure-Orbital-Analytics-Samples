@@ -159,6 +159,7 @@ module orchestrationModule 'groups/orchestration.bicep' = {
     environmentCode: environmentCode
     environmentTag: environment
     logAnalyticsWorkspaceId: monitorModule.outputs.workspaceId
+    appInsightsInstrumentationKey: monitorModule.outputs.appInsightsInstrumentationKey
     mountAccountKey: dataModule.outputs.rawStoragePrimaryKey
     mountAccountName: dataModule.outputs.rawStorageAccountName
     mountFileUrl: '${dataModule.outputs.rawStorageFileEndpointUri}volume-a'
