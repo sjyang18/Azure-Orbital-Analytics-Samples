@@ -8,7 +8,6 @@ param projectName string
 param location string
 
 param synapseMIPrincipalId string
-
 // Guid to role definitions to be used during role
 // assignments including the below roles definitions:
 // Contributor
@@ -23,6 +22,8 @@ param batchAccountName string = ''
 param batchAccountAutoStorageAccountName string = ''
 param acrName string = ''
 param uamiName string = ''
+param aksClusterName string = ''
+param functionStorageAccountName string = ''
 
 param pipelineResourceGroupName string
 param pipelineLinkedSvcKeyVaultName string
@@ -82,7 +83,6 @@ param batchAccountCpuOnlyPoolImageReferenceSku string = '20-04-lts'
 param batchAccountCpuOnlyPoolImageReferenceVersion string = 'latest'
 param batchAccountCpuOnlyPoolStartTaskCommandLine string = '/bin/bash -c "apt-get update && apt-get install -y python3-pip && pip install requests && pip install azure-storage-blob && pip install pandas"'
 
-
 param batchLogsDiagCategories array = [
   'allLogs'
 ]
@@ -90,7 +90,7 @@ param batchMetricsDiagCategories array = [
   'AllMetrics'
 ]
 param logAnalyticsWorkspaceId string
-
+param appInsightsInstrumentationKey string
 // Parameters with default values for ACR
 param acrSku string = 'Standard'
 
@@ -102,6 +102,8 @@ var keyvaultNameVar = empty(keyvaultName) ? '${namingPrefix}-kv' : keyvaultName
 var batchAccountNameVar = empty(batchAccountName) ? '${environmentCode}${projectName}batchact' : batchAccountName
 var batchAccountAutoStorageAccountNameVar = empty(batchAccountAutoStorageAccountName) ? 'batchacc${nameSuffix}' : batchAccountAutoStorageAccountName
 var acrNameVar = empty(acrName) ? '${environmentCode}${projectName}acr' : acrName
+var aksClusterNameVar = empty(aksClusterName) ? '${environmentCode}${projectName}aks' : aksClusterName
+var functionStorageAccountNameVar = empty(functionStorageAccountName) ? 'funxacc${nameSuffix}' : functionStorageAccountName
 
 module keyVault '../modules/akv.bicep' = {
   name: '${namingPrefix}-akv'
@@ -301,3 +303,119 @@ module batchDiagnosticSettings '../modules/batch-diagnostic-settings.bicep' = {
     batchAccount
   ]
 }
+
+module aksCluster '../modules/aks-cluster.bicep' = {
+  name: '${namingPrefix}-aks'
+  params: {
+    environmentName: environmentTag
+    clusterName: aksClusterNameVar
+    location: location
+    logAnalyticsWorkspaceResourceID: logAnalyticsWorkspaceId
+  }
+}
+
+module attachACRtoAKS '../modules/aks-attach-acr.bicep' = {
+  name: '${namingPrefix}-attachACRtoAKS'
+  params: {
+    kubeletIdentityId: aksCluster.outputs.kubeletIdentityId
+    acrName:  acrNameVar
+  }
+}
+
+module aksInvokerRoleDef '../modules/custom.roledef.bicep' = {
+  name: '${namingPrefix}-AKSInvokerCustomRole'
+  params: {
+    actions: [
+      'Microsoft.ContainerService/managedClusters/runcommand/action'
+      'Microsoft.ContainerService/managedclusters/commandResults/read'
+    ]
+    roleDescription: 'Can invoke and read runcommand to/from AKS'
+    roleName: 'custom-role-for-${aksClusterNameVar}'
+  }
+}
+
+module aksCustomRoleAssignment '../modules/aks-invoker-role-assignment.bicep' = {
+  name: 'custom-role-assignment-for-${aksClusterNameVar}'
+  params: {
+    principalId: synapseMIPrincipalId
+    aksClusterName: aksClusterNameVar
+    customRoleDefId: aksInvokerRoleDef.outputs.Id
+  }
+  dependsOn: [
+    aksCluster
+  ]
+}
+
+module functionAppStorageAccount '../modules/storage.bicep' = {
+  name: '${namingPrefix}-functionapp-storage'
+  params: {
+    storageAccountName: functionStorageAccountNameVar
+    environmentName: environmentTag
+    location: location
+    storeType: 'fapp-storage'
+  }
+}
+
+module functionAppHostPlan '../modules/asp.bicep' = {
+  name: '${namingPrefix}-asp'
+  params: {
+    aspName: '${namingPrefix}-asp'
+    aspKind: 'linux'
+    aspReserved: true
+    mewCount: 1
+    skuTier: 'Dynamic'
+    skuSize: 'Y1'
+    skuName: 'Y1'
+    location: location
+    environmentName: environmentTag
+  }
+}
+
+module functionApp '../modules/functionapp.bicep' = {
+  name: '${namingPrefix}-fapp'
+  params: {
+    functionAppName: '${namingPrefix}-fapp'
+    functionName: 'base64EncodedZipContent'
+    location: location
+    serverFarmId: functionAppHostPlan.outputs.id
+    appInsightsInstrumentationKey: appInsightsInstrumentationKey
+    functionRuntime: 'python'
+    storageAccountName: functionStorageAccountNameVar
+    storageAccountKey: functionAppStorageAccount.outputs.primaryKey
+    environmentName: environmentTag
+    extendedSiteConfig : {
+      use32BitWorkerProcess: false
+      linuxFxVersion: 'Python|3.9'     
+    }
+  }
+}
+
+module base64EncodedZipContentFunction '../modules/function.bicep' = {
+  name: '${namingPrefix}-base64fapp'
+  params: {
+    functionAppName: '${namingPrefix}-fapp'
+    functionName: 'base64EncodedZipContent'
+    functionFiles : {
+      '__init__.py': loadTextContent('gen_base64_encoded_content.py')
+    }
+    functionLanguage: 'python'
+  }
+  dependsOn:[
+    functionApp
+  ]
+}
+
+module functionKey '../modules/akv.secrets.bicep' = {
+  name: '${namingPrefix}-base64fapp-fkey'
+  scope: resourceGroup(pipelineResourceGroupName)
+  params: {
+    environmentName: environmentTag
+    keyVaultName: '${environmentCode}-pipeline-kv'
+    secretName: 'GenBase64EncondingFunctionKey' 
+    secretValue: base64EncodedZipContentFunction.outputs.functionkey
+  }
+}
+
+
+
+
