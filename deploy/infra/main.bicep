@@ -31,6 +31,14 @@ param orchestrationModulePrefix string = 'orc'
 
 @description('Specify whether or not to deploy batch account')
 param deployBatchAccount bool = true
+@description('Specify whether or not to deploy aks cluster')
+param deployAKSCluster bool = false
+
+@description('Optinally specify the different location of functiona apps is deployed. If not specified, it will be deployed in the same location as others')
+param functionAppLocation string = ''
+@description('Optinally specify the different location of AKS cluster is deployed. If not specified, it will be deployed in the same location as others')
+param aksClusterLocation string = ''
+
 
 var networkResourceGroupName = '${environmentCode}-${networkModulePrefix}-rg'
 var dataResourceGroupName = '${environmentCode}-${dataModulePrefix}-rg'
@@ -162,13 +170,17 @@ module orchestrationModule 'groups/orchestration.bicep' = {
     environmentCode: environmentCode
     environmentTag: environment
     logAnalyticsWorkspaceId: monitorModule.outputs.workspaceId
+    appInsightsInstrumentationKey: monitorModule.outputs.appInsightsInstrumentationKey
     mountAccountKey: dataModule.outputs.rawStoragePrimaryKey
     deployBatchAccount: deployBatchAccount
+    deployAKSCluster: deployAKSCluster
     mountAccountName: dataModule.outputs.rawStorageAccountName
     mountFileUrl: '${dataModule.outputs.rawStorageFileEndpointUri}volume-a'
     pipelineResourceGroupName: pipelineResourceGroup.name
     pipelineLinkedSvcKeyVaultName: '${environmentCode}-${pipelineModulePrefix}-kv'
     synapseMIPrincipalId: pipelineModule.outputs.synapseMIPrincipalId
+    functionAppLocation: functionAppLocation
+    aksClusterLocation: aksClusterLocation
   }
   dependsOn: [
     pipelineModule

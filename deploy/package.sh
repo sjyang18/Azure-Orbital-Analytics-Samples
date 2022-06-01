@@ -20,34 +20,64 @@ SYNAPSE_WORKSPACE_RG=${9:-${SYNAPSE_WORKSPACE_RG:-"${ENV_CODE}-pipeline-rg"}}
 SYNAPSE_WORKSPACE_NAME=${10:-${SYNAPSE_WORKSPACE_NAME}}
 SYNAPSE_STORAGE_ACCOUNT_NAME=${11:-${SYNAPSE_STORAGE_ACCOUNT_NAME}}
 SYNAPSE_POOL=${12:-${SYNAPSE_POOL}}
+DETECTION_MODEL_RUN_HOST_TYPE=${13:-${DETECTION_MODEL_RUN_HOST_TYPE:-"batch"}} # possible values: batch or aks
 
 set -ex
+if [[ -z "$DETECTION_MODEL_RUN_HOST_TYPE" ]]; then
+    DETECTION_MODEL_RUN_HOST_TYPE="batch"
+fi
 
-if [[ -z "$BATCH_ACCOUNT_NAME" ]] && [[ -z "$BATCH_ACCOUNT_RG_NAME" ]]; then
-    BATCH_ACCOUNT_RG_NAME="${ENV_CODE}-orc-rg"
-fi
-if [[ -z "$BATCH_ACCOUNT_NAME" ]]; then
-    BATCH_ACCOUNT_NAME=$(az batch account list --query "[?tags.type && tags.type == 'batch'].name" -o tsv -g $BATCH_ACCOUNT_RG_NAME)
-fi
-if [[ -z "$BATCH_ACCOUNT_RG_NAME" ]]; then
-    BATCH_ACCOUNT_ID=$(az batch account list --query "[?name == '${BATCH_ACCOUNT_NAME}'].id" -o tsv)
-    BATCH_ACCOUNT_RG_NAME=$(az resource show --ids ${BATCH_ACCOUNT_ID} --query resourceGroup -o tsv)
-fi
 if [[ -z "$RAW_STORAGE_ACCOUNT_NAME" ]]; then
     RAW_STORAGE_ACCOUNT_NAME=$(az storage account list --query "[?tags.store && tags.store == 'raw'].name" -o tsv -g $RAW_STORAGE_ACCOUNT_RG)
 fi
 if [[ -z "$SYNAPSE_STORAGE_ACCOUNT_NAME" ]]; then
     SYNAPSE_STORAGE_ACCOUNT_NAME=$(az storage account list --query "[?tags.store && tags.store == 'synapse'].name" -o tsv -g $SYNAPSE_WORKSPACE_RG)
 fi
-if [[ -z "$BATCH_STORAGE_ACCOUNT_NAME" ]]; then
-    BATCH_STORAGE_ACCOUNT_NAME=$(az storage account list --query "[?tags.store && tags.store == 'batch'].name" -o tsv -g $BATCH_ACCOUNT_RG_NAME)
-    if [[ -z "$BATCH_STORAGE_ACCOUNT_NAME" ]]; then
-        BATCH_STORAGE_ACCOUNT_NAME=$(az storage account list --resource-group $BATCH_ACCOUNT_RG_NAME --query [0].name -o tsv)
+
+if [[ "${DETECTION_MODEL_RUN_HOST_TYPE}" == "batch" ]];
+then
+    if [[ -z "$BATCH_ACCOUNT_NAME" ]] && [[ -z "$BATCH_ACCOUNT_RG_NAME" ]]; then
+        BATCH_ACCOUNT_RG_NAME="${ENV_CODE}-orc-rg"
     fi
+    if [[ -z "$BATCH_ACCOUNT_NAME" ]]; then
+        BATCH_ACCOUNT_NAME=$(az batch account list --query "[?tags.type && tags.type == 'batch'].name" -o tsv -g $BATCH_ACCOUNT_RG_NAME)
+    fi
+    if [[ -z "$BATCH_ACCOUNT_RG_NAME" ]]; then
+        BATCH_ACCOUNT_ID=$(az batch account list --query "[?name == '${BATCH_ACCOUNT_NAME}'].id" -o tsv)
+        BATCH_ACCOUNT_RG_NAME=$(az resource show --ids ${BATCH_ACCOUNT_ID} --query resourceGroup -o tsv)
+    fi
+    if [[ -z "$BATCH_STORAGE_ACCOUNT_NAME" ]]; then
+        BATCH_STORAGE_ACCOUNT_NAME=$(az storage account list --query "[?tags.store && tags.store == 'batch'].name" -o tsv -g $BATCH_ACCOUNT_RG_NAME)
+        if [[ -z "$BATCH_STORAGE_ACCOUNT_NAME" ]]; then
+            BATCH_STORAGE_ACCOUNT_NAME=$(az storage account list --resource-group $BATCH_ACCOUNT_RG_NAME --query [0].name -o tsv)
+        fi
+    fi
+    if [[ -z "$BATCH_ACCOUNT_LOCATION" ]]; then
+        BATCH_ACCOUNT_LOCATION=$(az batch account list --query "[?name == '${BATCH_ACCOUNT_NAME}'].location" -o tsv)
+    fi
+else
+    AKS_ID=$(az aks list -g ${ENV_CODE}-orc-rg --query "[?tags.type && tags.type == 'k8s'].id" -otsv)
+    while [[ ${AKS_ID} == '' ]];
+    do
+        sleep 60
+        AKS_ID=$(az aks list -g ${ENV_CODE}-orc-rg --query "[?tags.type && tags.type == 'k8s'].id" -otsv)
+    done
+
+    PERSISTENT_VOLUME_CLAIM="${ENV_CODE}-vision-fileshare"
+    AKS_MANAGEMENT_REST_URL="https://management.azure.com${AKS_ID}/runCommand?api-version=2022-02-01"
+    BASE64ENCODEDZIPCONTENT_FUNCTIONAPP_HOST=$(az functionapp list -g ${ENV_CODE}-orc-rg \
+        --query "[?tags.type && tags.type == 'functionapp'].hostNames[0]" | jq -r '.[0]')
+
+    while [[ ${BASE64ENCODEDZIPCONTENT_FUNCTIONAPP_HOST} == '' ]];
+    do
+        sleep 60
+        BASE64ENCODEDZIPCONTENT_FUNCTIONAPP_HOST=$(az functionapp list -g ${ENV_CODE}-orc-rg \
+        --query "[?tags.type && tags.type == 'functionapp'].hostNames[0]" | jq -r '.[0]')
+    done
+    BASE64ENCODEDZIPCONTENT_FUNCTIONAPP_URL="https://${BASE64ENCODEDZIPCONTENT_FUNCTIONAPP_HOST}"
 fi
-if [[ -z "$BATCH_ACCOUNT_LOCATION" ]]; then
-    BATCH_ACCOUNT_LOCATION=$(az batch account list --query "[?name == '${BATCH_ACCOUNT_NAME}'].location" -o tsv)
-fi
+
+
 if [[ -z "$KEY_VAULT_NAME" ]]; then
     KEY_VAULT_NAME=$(az keyvault list --query "[?tags.usage && tags.usage == 'linkedService'].name" -o tsv -g $SYNAPSE_WORKSPACE_RG)
 fi
@@ -59,14 +89,28 @@ if [[ -z "$SYNAPSE_POOL" ]]; then
 fi
 
 echo 'Retrieved resource from Azure and ready to package'
-PACKAGING_SCRIPT="python3 ${PRJ_ROOT}/deploy/package.py --raw_storage_account_name $RAW_STORAGE_ACCOUNT_NAME \
-    --synapse_storage_account_name $SYNAPSE_STORAGE_ACCOUNT_NAME \
-    --batch_storage_account_name $BATCH_STORAGE_ACCOUNT_NAME \
-    --batch_account $BATCH_ACCOUNT_NAME \
-    --linked_key_vault $KEY_VAULT_NAME \
-    --synapse_pool_name $SYNAPSE_POOL \
-    --location $BATCH_ACCOUNT_LOCATION \
-    --pipeline_name $PIPELINE_NAME"
+if [[ "${DETECTION_MODEL_RUN_HOST_TYPE}" == "batch" ]];
+then
+    PACKAGING_SCRIPT="python3 ${PRJ_ROOT}/deploy/package.py --raw_storage_account_name $RAW_STORAGE_ACCOUNT_NAME \
+        --synapse_storage_account_name $SYNAPSE_STORAGE_ACCOUNT_NAME \
+        --detection_model_run_host_type batch \
+        --batch_storage_account_name $BATCH_STORAGE_ACCOUNT_NAME \
+        --batch_account $BATCH_ACCOUNT_NAME \
+        --linked_key_vault $KEY_VAULT_NAME \
+        --synapse_pool_name $SYNAPSE_POOL \
+        --location $BATCH_ACCOUNT_LOCATION \
+        --pipeline_name $PIPELINE_NAME"
+else
+    PACKAGING_SCRIPT="python3 ${PRJ_ROOT}/deploy/package.py --raw_storage_account_name $RAW_STORAGE_ACCOUNT_NAME \
+        --synapse_storage_account_name $SYNAPSE_STORAGE_ACCOUNT_NAME \
+        --detection_model_run_host_type aks \
+        --persistent_volume_claim $PERSISTENT_VOLUME_CLAIM \
+        --aks_management_rest_url $AKS_MANAGEMENT_REST_URL \
+        --base64encodedzipcontent_functionapp_url $BASE64ENCODEDZIPCONTENT_FUNCTIONAPP_URL \
+        --linked_key_vault $KEY_VAULT_NAME \
+        --synapse_pool_name $SYNAPSE_POOL \
+        --pipeline_name $PIPELINE_NAME"
+fi
 
 echo $PACKAGING_SCRIPT
 echo 'Starting packaging script ...'
