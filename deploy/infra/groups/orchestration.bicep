@@ -24,10 +24,8 @@ param acrName string = ''
 param uamiName string = ''
 param aksClusterName string = ''
 param aksVmSize string = 'Standard_D2_v5'
-param aksClusterLocation string = ''
 param functionStorageAccountName string = ''
 param functionAppName string = ''
-param functionAppLocation string = ''
 
 param pipelineResourceGroupName string
 param pipelineLinkedSvcKeyVaultName string
@@ -109,10 +107,8 @@ var batchAccountNameVar = empty(batchAccountName) ? '${environmentCode}${project
 var batchAccountAutoStorageAccountNameVar = empty(batchAccountAutoStorageAccountName) ? 'batchacc${nameSuffix}' : batchAccountAutoStorageAccountName
 var acrNameVar = empty(acrName) ? '${environmentCode}${projectName}acr' : acrName
 var aksClusterNameVar = empty(aksClusterName) ? '${environmentCode}${projectName}aks' : aksClusterName
-var aksClusterLocationVar = empty(aksClusterLocation) ? location : aksClusterLocation
 var functionStorageAccountNameVar = empty(functionStorageAccountName) ? 'funxacc${nameSuffix}' : functionStorageAccountName
 var functionAppNameVar = empty(functionAppName) ? '${namingPrefix}-fapp' : functionAppName
-var functionAppLocationVar = empty(functionAppLocation) ? location : functionAppLocation
 
 module keyVault '../modules/akv.bicep' = {
   name: '${namingPrefix}-akv'
@@ -318,7 +314,7 @@ module aksCluster '../modules/aks-cluster.bicep' = if(deployAKSCluster) {
   params: {
     environmentName: environmentTag
     clusterName: aksClusterNameVar
-    location: aksClusterLocationVar
+    location: location
     logAnalyticsWorkspaceResourceID: logAnalyticsWorkspaceId
     vmSize: aksVmSize
   }
@@ -376,7 +372,7 @@ module functionAppHostPlan '../modules/asp.bicep' = if(deployAKSCluster) {
     skuTier: 'Dynamic'
     skuSize: 'Y1'
     skuName: 'Y1'
-    location: functionAppLocationVar
+    location: location
     environmentName: environmentTag
   }
 }
@@ -386,7 +382,7 @@ module functionApp '../modules/functionapp.bicep' = if(deployAKSCluster) {
   params: {
     functionAppName: functionAppNameVar
     functionName: 'base64EncodedZipContent'
-    location: functionAppLocationVar
+    location: location
     serverFarmId: functionAppHostPlan.outputs.id
     appInsightsInstrumentationKey: appInsightsInstrumentationKey
     functionRuntime: 'python'

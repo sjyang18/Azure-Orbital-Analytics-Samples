@@ -24,8 +24,6 @@ deploymentName=${3:-${deploymentName:-"${envCode}-deploy"}}
 envTag=${4:-${envTag:-"synapse-${envCode}"}}
 deployBatchAccount=${5:-${deployBatchAccount:-"true"}}
 deployAKSCluster=${6:-${deployAKSCluster:-"false"}}
-functionAppLocation=${7:-${functionAppLocation:-""}}
-aksClusterLocation=${8:-${aksClusterLocation:-""}}
 
 DEPLOYMENT_SCRIPT="az deployment sub create -l $location -n $deploymentName \
     -f ./deploy/infra/main.bicep \
@@ -34,9 +32,7 @@ DEPLOYMENT_SCRIPT="az deployment sub create -l $location -n $deploymentName \
     environmentCode=$envCode \
     environment=$envTag \
     deployBatchAccount=$deployBatchAccount \
-    deployAKSCluster=$deployAKSCluster \
-    functionAppLocation=${functionAppLocation} \
-    aksClusterLocation=${aksClusterLocation} "
+    deployAKSCluster=$deployAKSCluster"
 $DEPLOYMENT_SCRIPT
 set +x
 
