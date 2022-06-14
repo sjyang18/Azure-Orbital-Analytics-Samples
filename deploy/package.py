@@ -9,18 +9,33 @@ import shutil
 
 # Collect args
 parser = argparse.ArgumentParser(description='Arguments required to run packaging function')
+parser.add_argument('--detection_model_run_host_type',
+    type=str, required=False, default='batch',
+    help='Type of model run host either batch or aks')
 parser.add_argument('--raw_storage_account_name', type=str, required=True, help='Name of the Raw data hosting Storage Account')
 parser.add_argument('--synapse_storage_account_name', type=str, required=True, help='Name of the Raw data hosting Storage Account')
 parser.add_argument('--synapse_pool_name', type=str, required=True, help='Name of the Synapse pool in the Synapse workspace to use as default')
 parser.add_argument('--synapse_workspace_id', type=str, required=True, help='Id for the Synapse workspace')
 parser.add_argument('--synapse_workspace', type=str, required=True, help='Synapse pool name')
-parser.add_argument('--batch_storage_account_name', type=str, required=True, help='Name of the Batch Storage Account')
-parser.add_argument('--batch_account', type=str, required=True, help="Batch Account name")
+parser.add_argument('--batch_storage_account_name', type=str, required=False, help='Name of the Batch Storage Account')
+parser.add_argument('--batch_account', type=str, required=False, help="Batch Account name")
 parser.add_argument('--linked_key_vault', type=str, required=True, help="Key Vault to be added as Linked Service")
-parser.add_argument('--location', type=str, required=True, help="Batch Account Location")
+parser.add_argument('--location', type=str, required=False, help="Batch Account Location")
 parser.add_argument('--pipeline_name', type=str, required=True, help="Name of the pipeline to package")
 parser.add_argument('--pg_db_username', type=str, required=True, help="Username to login to postgres db")
 parser.add_argument('--pg_db_server_name', type=str, required=True, help="Server name to login to postgres db")
+parser.add_argument('--persistent_volume_claim',
+    type=str, required=False,
+    default='__env_code__-vision-fileshare',
+    help="persistent volume claim object name set up in AKS")
+parser.add_argument('--aks_management_rest_url',
+    type=str, required=False,
+    default='https://management.azure.com/subscriptions/__subscription__/resourceGroups/__env_code__-orc-rg/providers/Microsoft.ContainerService/managedClusters/__env_code__-aks2/runCommand?api-version=2022-02-01',
+    help="AKS management rest URL")
+parser.add_argument('--base64encodedzipcontent_functionapp_url',
+    type=str, required=False,
+    help="functionapp url for base64encodedzipcontent"
+)
 
 #Parse Args
 args = parser.parse_args()
@@ -88,20 +103,35 @@ def package(pipeline_name: str, tokens_map: dict):
     
 if __name__ == "__main__":
 
-    # list of tokens and their values to be replaced
-    tokens_map = {
-        '__raw_data_storage_account__': args.raw_storage_account_name,
-        '__batch_storage_account__': args.batch_storage_account_name,
-        '__batch_account__': args.batch_account,
-        '__linked_key_vault__': args.linked_key_vault,
-        '__synapse_storage_account__': args.synapse_storage_account_name,
-        '__synapse_pool_name__': args.synapse_pool_name,
-        '__synapse_workspace_id__':args.synapse_workspace_id,
-        '__synapse_workspace__':args.synapse_workspace,
-        '__location__': args.location,
-        '__pg_db_username__': args.pg_db_username,
-        '__pg_db_server_name__': args.pg_db_server_name
-    }
+    if args.detection_model_run_host_type == 'batch':
+        # list of tokens and their values to be replaced
+        tokens_map = {
+            '__raw_data_storage_account__': args.raw_storage_account_name,
+            '__batch_storage_account__': args.batch_storage_account_name,
+            '__batch_account__': args.batch_account,
+            '__linked_key_vault__': args.linked_key_vault,
+            '__synapse_storage_account__': args.synapse_storage_account_name,
+            '__synapse_pool_name__': args.synapse_pool_name,
+            '__synapse_workspace_id__':args.synapse_workspace_id,
+            '__synapse_workspace__':args.synapse_workspace,
+            '__location__': args.location,
+            '__pg_db_username__': args.pg_db_username,
+            '__pg_db_server_name__': args.pg_db_server_name
+        }
+    else: #aks
+        tokens_map = {
+            '__raw_data_storage_account__': args.raw_storage_account_name,
+            '__persistent_volume_claim__': args.persistent_volume_claim,
+            '__aks_management_rest_url__': args.aks_management_rest_url,
+            '__base64encodedzipcontent_functionapp_url__': args.base64encodedzipcontent_functionapp_url,
+            '__linked_key_vault__': args.linked_key_vault,
+            '__synapse_storage_account__': args.synapse_storage_account_name,
+            '__synapse_pool_name__': args.synapse_pool_name,
+            '__synapse_workspace_id__':args.synapse_workspace_id,
+            '__synapse_workspace__':args.synapse_workspace,
+            '__pg_db_username__': args.pg_db_username,
+            '__pg_db_server_name__': args.pg_db_server_name
+        }
 
     # invoke package method
     package(args.pipeline_name, tokens_map)

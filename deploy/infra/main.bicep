@@ -31,6 +31,8 @@ param orchestrationModulePrefix string = 'orc'
 
 @description('Specify whether or not to deploy batch account')
 param deployBatchAccount bool = true
+@description('Specify whether or not to deploy aks cluster')
+param deployAKSCluster bool = false
 
 @description('Postgres DB administrator login password')
 @secure()
@@ -165,8 +167,10 @@ module orchestrationModule 'groups/orchestration.bicep' = {
     environmentCode: environmentCode
     environmentTag: environment
     logAnalyticsWorkspaceId: monitorModule.outputs.workspaceId
+    appInsightsInstrumentationKey: monitorModule.outputs.appInsightsInstrumentationKey
     mountAccountKey: dataModule.outputs.rawStoragePrimaryKey
     deployBatchAccount: deployBatchAccount
+    deployAKSCluster: deployAKSCluster
     mountAccountName: dataModule.outputs.rawStorageAccountName
     mountFileUrl: '${dataModule.outputs.rawStorageFileEndpointUri}volume-a'
     pipelineResourceGroupName: pipelineResourceGroup.name
