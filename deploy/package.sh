@@ -94,9 +94,7 @@ if [[ "$AI_MODEL_INFRA_TYPE" == "batch-account" ]]; then
         --location $BATCH_ACCOUNT_LOCATION \
         --pipeline_name $PIPELINE_NAME \
         --synapse_workspace $SYNAPSE_WORKSPACE_NAME \
-        --synapse_workspace_id $SYNAPSE_WORKSPACE_ID \
-        --pg_db_username $DB_USERNAME \
-        --pg_db_server_name $DB_SERVER_NAME"
+        --synapse_workspace_id $SYNAPSE_WORKSPACE_ID"
 
 elif [[ "$AI_MODEL_INFRA_TYPE" == "aks" ]]; then
     echo "Selected AI model processing infra-type: AKS!!!"
@@ -129,9 +127,8 @@ elif [[ "$AI_MODEL_INFRA_TYPE" == "aks" ]]; then
         --synapse_pool_name $SYNAPSE_POOL \
         --pipeline_name $PIPELINE_NAME \
         --synapse_workspace $SYNAPSE_WORKSPACE_NAME \
-        --synapse_workspace_id $SYNAPSE_WORKSPACE_ID \
-        --pg_db_username $DB_USERNAME \
-        --pg_db_server_name $DB_SERVER_NAME"
+        --synapse_workspace_id $SYNAPSE_WORKSPACE_ID"
+
 fi
 
 if [[ $DEPLOY_PGSQL == "true" ]]; then
