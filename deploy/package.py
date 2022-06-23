@@ -89,6 +89,15 @@ def package(pipeline_name: str, tokens_map: dict, model_infra_type='batch-accoun
                         shutil.move(
                             os.path.join(package_manifest_folder, src),
                             os.path.join(package_manifest_folder, dest))
+                        modified_jdata = {}
+                        with open(os.path.join(package_manifest_folder, dest), 'r') as fp:
+                            modified_jdata = json.load(fp)
+                            if modified_jdata.get('name') is not None:
+                                path_splitted = dest.split('/')
+                                name_only_with_extension = path_splitted[-1].split('.')[0]
+                                modified_jdata['name'] = name_only_with_extension
+                        with open(os.path.join(package_manifest_folder, dest), 'w') as fp:
+                            json.dump(modified_jdata, fp, indent=4)
 
     # set of folder names are fixed for synapse pipelines and hence hardcoding them
     for folder in ['linkedService', 'sparkJobDefinition', 'pipeline', 'bigDataPool', 'notebook']:

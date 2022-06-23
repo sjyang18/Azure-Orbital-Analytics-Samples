@@ -502,7 +502,7 @@
                 },
                 "userProperties": [],
                 "typeProperties": {
-                    "url": "__aks_management_rest_url__",
+                    "url": "@pipeline().parameters.AksManagementRestApiURL",
                     "connectVia": {
                         "referenceName": "AutoResolveIntegrationRuntime",
                         "type": "IntegrationRuntimeReference"
@@ -556,7 +556,7 @@
                             },
                             "userProperties": [],
                             "typeProperties": {
-                                "url": "__aks_management_rest_url__",
+                                "url": "@pipeline().parameters.AksManagementRestApiURL",
                                 "connectVia": {
                                     "referenceName": "AutoResolveIntegrationRuntime",
                                     "type": "IntegrationRuntimeReference"
@@ -618,6 +618,10 @@
             "StorageAccountKey": {
                 "type": "string",
                 "defaultValue": ""
+            },
+            "AksManagementRestApiURL": {
+                "type": "string",
+                "defaultValue": "__aks_management_rest_url__"
             },
             "PersistentVolumeClaim": {
                 "type": "string",

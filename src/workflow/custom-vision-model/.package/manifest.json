@@ -13,7 +13,6 @@
                 "../pipeline/E2E Custom Vision Model Flow.json"
             ],
             "rename" : {
-                "../pipeline/Custom Vision Object Detection v2_aks.json" : "../pipeline/Custom Vision Object Detection v2.json",
                 "../pipeline/E2E Custom Vision Model Flow_aks.json": "../pipeline/E2E Custom Vision Model Flow.json"
             }
         }

@@ -60,6 +60,10 @@
                             "value": "@pipeline().parameters.StorageAccountKey",
                             "type": "Expression"
                         },
+                        "AksManagementRestApiURL": {
+                            "value": "@pipeline().parameters.AksManagementRestApiURL",
+                            "type": "Expression"
+                        },
                         "PersistentVolumeClaim": {
                             "value": "@pipeline().parameters.PersistentVolumeClaim",
                             "type": "Expression"
@@ -80,6 +84,10 @@
             "StorageAccountKey": {
                 "type": "string",
                 "defaultValue": ""
+            },
+            "AksManagementRestApiURL": {
+                "type": "string",
+                "defaultValue": "__aks_management_rest_url__"
             },
             "PersistentVolumeClaim": {
                 "type": "string",
